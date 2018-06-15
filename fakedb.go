@@ -3,10 +3,6 @@ package fakedb
 import (
 	"database/sql"
 	"database/sql/driver"
-	"encoding/csv"
-	"fmt"
-	"io"
-	"os"
 	"strings"
 )
 
@@ -18,18 +14,13 @@ func init() {
 }
 
 type Driver struct {
-    header []string
-	data   [][]string
 }
 
 type Conn struct {
-	header []string
-	data   [][]string
 }
 
 type Stmt struct {
 	conn  *Conn
-	count bool
 	input int
 }
 
@@ -46,38 +37,12 @@ type DataRows struct {
 	line int
 }
 
-type CountRows struct {
-	conn *Conn
-	line int
-}
-
-func (d *Driver) Open(fileName string) (driver.Conn, error) {
-    if d.header == nil {
-     	file, err := os.Open(fileName)
-	if err != nil {
-		return nil, err
-	}
-	csvReader := csv.NewReader(file)
-	data, err := csvReader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("missing header")
-	}
-    d.header = data[0]
-    d.data = data[1:]   
-    }
-
-	return &Conn{
-		header: d.header,
-		data:   d.data}, nil
+func (d *Driver) Open(string) (driver.Conn, error) {
+	return &Conn{}, nil
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
-	return &Stmt{conn: c,
-		count: strings.Contains(query, "count"),
-		input: strings.Count(query, "?")}, nil
+	return &Stmt{conn: c, input: strings.Count(query, "?")}, nil
 }
 
 func (c *Conn) Close() error {
@@ -109,14 +74,11 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 }
 
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	if s.count {
-		return &CountRows{line: 0, conn: s.conn}, nil
-	}
-	return &DataRows{line: 0, conn: s.conn}, nil
+	return &DataRows{}, nil
 }
 
 func (r *DataRows) Columns() []string {
-	return r.conn.header
+	return nil
 }
 
 func (r *DataRows) Close() error {
@@ -124,30 +86,6 @@ func (r *DataRows) Close() error {
 }
 
 func (r *DataRows) Next(dest []driver.Value) error {
-	if r.line >= len(r.conn.data) {
-		return io.EOF
-	}
-	for i := range r.conn.header {
-		dest[i] = r.conn.data[r.line][i]
-	}
-	r.line++
-	return nil
-}
-
-func (r *CountRows) Columns() []string {
-	return []string{"count"}
-}
-
-func (r *CountRows) Close() error {
-	return nil
-}
-
-func (r *CountRows) Next(dest []driver.Value) error {
-	if r.line > 0 {
-		return io.EOF
-	}
-	dest[0] = int64(len(r.conn.data))
-	r.line++
 	return nil
 }
 
